@@ -37,6 +37,8 @@ import csv
 import sys
 from pathlib import Path
 
+csv.field_size_limit(sys.maxsize)
+
 import kenlm
 from botok import WordTokenizer
 from huggingface_hub import hf_hub_download
@@ -46,7 +48,7 @@ from calculate_cer import prepare, load_ground_truth
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
-BASE          = Path(__file__).parent.parent
+BASE          = Path(__file__).parent.parent.parent / "data"
 CATALOG       = BASE / "runs" / "catalog.csv"
 INFERENCE     = BASE / "inference"
 ANALYSIS      = BASE / "analysis" / "perplexity"
@@ -89,7 +91,7 @@ def tokenize_syllables(text: str, tokenizer: WordTokenizer) -> str:
 
     words = tokenizer.tokenize(text)
     # Each word is already syllable-level; join with spaces for kenlm
-    return " ".join(w for w in words)
+    return " ".join(w.text for w in words)
 
 
 # ── Perplexity computation ─────────────────────────────────────────────────────
@@ -158,15 +160,19 @@ def compute_run(
         if not fn:
             continue
 
-        # Raw perplexity (minimal preprocessing)
-        raw_text = prepare_raw(transcription)
-        raw_tokens = tokenize_syllables(raw_text, tokenizer)
-        ppl_raw = compute_perplexity(raw_tokens, model)
+        try:
+            # Raw perplexity (minimal preprocessing)
+            raw_text = prepare_raw(transcription)
+            raw_tokens = tokenize_syllables(raw_text, tokenizer)
+            ppl_raw = compute_perplexity(raw_tokens, model)
 
-        # Normalized perplexity (full CER normalization pipeline)
-        norm_text = prepare(transcription, is_hypothesis=True)
-        norm_tokens = tokenize_syllables(norm_text, tokenizer)
-        ppl_norm = compute_perplexity(norm_tokens, model)
+            # Normalized perplexity (full CER normalization pipeline)
+            norm_text = prepare(transcription, is_hypothesis=True)
+            norm_tokens = tokenize_syllables(norm_text, tokenizer)
+            ppl_norm = compute_perplexity(norm_tokens, model)
+        except Exception:
+            ppl_raw = None
+            ppl_norm = None
 
         rec = {
             "file_name": fn,
