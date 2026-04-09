@@ -22,6 +22,7 @@ CER_DIR           = os.path.join(BASE, "analysis", "cer")
 PPL_DIR           = os.path.join(BASE, "analysis", "perplexity")
 MERGED_PATH       = os.path.join(BASE, "analysis", "merged.csv")
 REPORT_PATH       = os.path.join(BASE, "analysis", "report_data.json")
+GT_PPL_PATH       = os.path.join(BASE, "analysis", "perplexity", "benchmark_transcriptions.csv")
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -329,13 +330,49 @@ overall_correlation = {
     "cer_vs_log_ppl_norm": pearson([v[0] for v in valid], [log_ppl(v[2]) for v in valid]),
 }
 
-# ── 9. assemble report_data.json ──────────────────────────────────────────────
+# ── 9. ground truth PPL stats ─────────────────────────────────────────────────
+ground_truth_ppl = {"raw_median": None, "norm_median": None, "raw_mean": None, "norm_mean": None}
+if os.path.exists(GT_PPL_PATH):
+    gt_rows = read_csv_dicts(GT_PPL_PATH)
+    gt_raw  = [safe_float(r["perplexity_raw"])        for r in gt_rows]
+    gt_norm = [safe_float(r["perplexity_normalized"]) for r in gt_rows]
+    ground_truth_ppl["raw_median"]  = round(median(gt_raw),  2) if median(gt_raw)  is not None else None
+    ground_truth_ppl["norm_median"] = round(median(gt_norm), 2) if median(gt_norm) is not None else None
+    ground_truth_ppl["raw_mean"]    = round(mean(gt_raw),    2) if mean(gt_raw)    is not None else None
+    ground_truth_ppl["norm_mean"]   = round(mean(gt_norm),   2) if mean(gt_norm)   is not None else None
+    print(f"Ground truth PPL — raw median: {ground_truth_ppl['raw_median']}, norm median: {ground_truth_ppl['norm_median']}")
+    runs_summary.append({
+        "bid":              "benchmark",
+        "rid":              "ground_truth",
+        "engine":           "ground_truth",
+        "model":            "Ground Truth",
+        "model_display":    "Ground Truth",
+        "options_str":      "",
+        "label":            "Ground Truth",
+        "n_cer":            0,
+        "n_ppl":            len([r for r in gt_rows if safe_float(r["perplexity_raw"]) is not None]),
+        "cer_mean":         None,
+        "cer_median":       None,
+        "cer_p25":          None,
+        "cer_p75":          None,
+        "ppl_raw_mean":     ground_truth_ppl["raw_mean"],
+        "ppl_raw_median":   ground_truth_ppl["raw_median"],
+        "ppl_norm_mean":    ground_truth_ppl["norm_mean"],
+        "ppl_norm_median":  ground_truth_ppl["norm_median"],
+        "corr_cer_log_ppl_raw":  None,
+        "corr_cer_log_ppl_norm": None,
+    })
+else:
+    print(f"[WARN] Ground truth PPL file not found: {GT_PPL_PATH}")
+
+# ── 10. assemble report_data.json ─────────────────────────────────────────────
 report = {
     "runs":        runs_summary,
     "breakdowns":  breakdowns,
     "image_sample": image_sample,
     "sample_run":  sample_run,
     "overall_correlation": overall_correlation,
+    "ground_truth_ppl": ground_truth_ppl,
     "engine_colors": {
         "gemini":        "#D4793A",
         "google_vision": "#3B6BCA",
@@ -344,6 +381,7 @@ report = {
         "dots":          "#D4A843",
         "dots_mocr":     "#C94A4A",
         "paddleocr":     "#E8734A",
+        "ground_truth":  "#4ade80",
     },
     "engine_labels": {
         "gemini":        "Gemini",
@@ -353,6 +391,7 @@ report = {
         "dots":          "Dots OCR",
         "dots_mocr":     "Dots MOCR",
         "paddleocr":     "PaddleOCR",
+        "ground_truth":  "Ground Truth",
     },
     "dimensions": ["Script Type", "Technology", "Legibility", "Format"],
 }
@@ -361,3 +400,18 @@ with open(REPORT_PATH, "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2, ensure_ascii=False)
 
 print(f"Wrote report_data.json → {REPORT_PATH}")
+
+# Inject DATA directly into docs/index.html so it stays self-contained
+HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "docs", "index.html")
+if os.path.exists(HTML_PATH):
+    with open(HTML_PATH, "r", encoding="utf-8") as f:
+        html = f.read()
+    marker = "const DATA = "
+    start  = html.index(marker)
+    end    = html.index(";
+", start) + 2
+    html   = html[:start] + "const DATA = " + json.dumps(report, ensure_ascii=False) + ";
+" + html[end:]
+    with open(HTML_PATH, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"Injected DATA → {HTML_PATH}")

@@ -52,6 +52,8 @@ BASE          = Path(__file__).parent.parent.parent / "data"
 CATALOG       = BASE / "runs" / "catalog.csv"
 INFERENCE     = BASE / "inference"
 ANALYSIS      = BASE / "analysis" / "perplexity"
+TRANSCRIPTIONS = BASE / "transcriptions" / "benchmark.csv"
+TRANSCRIPTIONS = BASE / "transcriptions" / "benchmark.csv"
 
 # HuggingFace model details
 HF_REPO_ID    = "openpecha/BoKenlm-syl-v0.1"
@@ -211,6 +213,9 @@ def main() -> None:
     parser.add_argument("--benchmark-id", metavar="BENCHMARK_ID",
                         default="20260315",
                         help="Benchmark ID (default: %(default)s)")
+    parser.add_argument("--transcriptions", action="store_true",
+                        help="Compute perplexity for data/transcriptions/benchmark.csv "
+                             "and write to data/analysis/perplexity/benchmark_transcriptions.csv")
     parser.add_argument("--force", action="store_true",
                         help="Re-compute even if output already exists")
     args = parser.parse_args()
@@ -221,6 +226,47 @@ def main() -> None:
     print("Loading tokenizer …")
     tokenizer = load_tokenizer()
     print()
+
+    if args.transcriptions:
+        out = ANALYSIS / "benchmark_transcriptions.csv"
+        if not args.force and out.exists():
+            print(f"SKIP {out} (already computed — use --force to redo)")
+            return
+        if not TRANSCRIPTIONS.exists():
+            sys.exit(f"ERROR: {TRANSCRIPTIONS} not found.")
+        print(f"Reading {TRANSCRIPTIONS} …")
+        with TRANSCRIPTIONS.open(encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        records = []
+        for row in rows:
+            fn = row.get("file_name", "")
+            transcription = row.get("transcription", "")
+            if not fn:
+                continue
+            try:
+                raw_tokens  = tokenize_syllables(prepare_raw(transcription), tokenizer)
+                ppl_raw     = compute_perplexity(raw_tokens, model)
+                norm_tokens = tokenize_syllables(prepare(transcription, is_hypothesis=True), tokenizer)
+                ppl_norm    = compute_perplexity(norm_tokens, model)
+            except Exception:
+                ppl_raw = ppl_norm = None
+            records.append({
+                "file_name":             fn,
+                "perplexity_raw":        ppl_raw  if ppl_raw  is not None else "",
+                "perplexity_normalized": ppl_norm if ppl_norm is not None else "",
+            })
+        records.sort(key=lambda r: r["file_name"])
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with out.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=["file_name", "perplexity_raw", "perplexity_normalized"])
+            writer.writeheader()
+            writer.writerows(records)
+        raw_vals  = [float(r["perplexity_raw"])        for r in records if r["perplexity_raw"]]
+        norm_vals = [float(r["perplexity_normalized"]) for r in records if r["perplexity_normalized"]]
+        mean_raw  = sum(raw_vals)  / len(raw_vals)  if raw_vals  else float("nan")
+        mean_norm = sum(norm_vals) / len(norm_vals) if norm_vals else float("nan")
+        print(f"  {len(records)} images — mean PPL raw: {mean_raw:.4f}, normalized: {mean_norm:.4f} — written to {out}")
+        return
 
     if args.run_id:
         runs = [{"benchmark_id": args.benchmark_id, "run_id": args.run_id}]
