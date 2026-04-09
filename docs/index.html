@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Tibetan OCR — Perplexity Report</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -12,7 +13,7 @@
 :root {
   --bg:         #0f1117;
   --surface:    #1a1d27;
-  --surface2:   #23273a;
+
   --border:     #2e3247;
   --text:       #e8eaf0;
   --muted:      #8b90a7;
@@ -196,9 +197,25 @@ section > h2 {
   <div class="cards" id="scorecards"></div>
 </section>
 
-<!-- 2. Engine comparison grouped bar -->
+<!-- 2. Perplexity by Engine -->
 <section>
-  <h2>Engine Comparison</h2>
+  <h2>Perplexity by Engine</h2>
+  <div class="panel">
+    <h3>Median PPL (Raw &amp; Normalized) by Engine — including Ground Truth</h3>
+    <p class="desc">
+      Lower PPL = more natural-looking Tibetan. <strong>Ground Truth</strong> sets the lower bound —
+      the perplexity of clean human transcriptions scored by the same language model.
+      Engines that produce fluent Tibetan (even if inaccurate) will score near Ground Truth.
+    </p>
+    <div style="position:relative;height:400px">
+      <canvas id="pplCompChart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Engine comparison grouped bar -->
+<section>
+  <h2>Engine Comparison (CER + PPL)</h2>
   <div class="panel">
     <h3>Median CER &amp; Median PPL (log scale) by Engine</h3>
     <p class="desc">
@@ -233,8 +250,8 @@ section > h2 {
   <div class="panel">
     <h3>CER spread per engine (best run each)</h3>
     <p class="desc">
-      The bar shows the interquartile range (P25–P75). The line marks the median.
-      Whiskers represent the mean.
+      The bar shows the interquartile range (P25–P75). The white line marks the median.
+      Hover for full stats including mean.
     </p>
     <div style="position:relative;height:350px">
       <canvas id="boxChart"></canvas>
@@ -351,11 +368,89 @@ function fmtK(v) { return v >= 1000 ? (v/1000).toFixed(1)+'K' : v.toFixed(0); }
   });
 })();
 
+// ── PPL Comparison by Engine ─────────────────────────────────────────────────
+(function() {
+  // Best run per engine by lowest ppl_raw_median (include ground_truth)
+  const bestByEngine = {};
+  DATA.runs.forEach(r => {
+    if (r.ppl_raw_median === null || r.ppl_raw_median === undefined) return;
+    if (!bestByEngine[r.engine] || r.ppl_raw_median < bestByEngine[r.engine].ppl_raw_median)
+      bestByEngine[r.engine] = r;
+  });
+
+  const engines = Object.keys(bestByEngine).sort((a,b) =>
+    bestByEngine[a].ppl_raw_median - bestByEngine[b].ppl_raw_median);
+
+  const labels  = engines.map(e => EL[e]||e);
+  const rawData = engines.map(e => bestByEngine[e].ppl_raw_median);
+  const nrmData = engines.map(e => bestByEngine[e].ppl_norm_median);
+  const colors  = engines.map(e => EC[e]||'#888');
+
+  const ctx = document.getElementById('pplCompChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'PPL Raw (median)',
+          data: rawData,
+          backgroundColor: colors.map(c => c + 'cc'),
+          borderColor: colors,
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'PPL Normalized (median)',
+          data: nrmData,
+          backgroundColor: colors.map(c => c + '44'),
+          borderColor: colors,
+          borderWidth: 2,
+          borderRadius: 4,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#8b90a7' } },
+        tooltip: {
+          callbacks: {
+            afterLabel: (item) => {
+              const eng = engines[item.dataIndex];
+              const r = bestByEngine[eng];
+              const lines = [
+                'PPL raw median: '+fmtK(r.ppl_raw_median),
+                'PPL norm median: '+fmtK(r.ppl_norm_median),
+              ];
+              if (r.cer_median !== null && r.cer_median !== undefined)
+                lines.push('CER median: '+(r.cer_median*100).toFixed(1)+'%');
+              else
+                lines.push('CER: N/A (ground truth)');
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#2e3247' }, ticks: { color: '#8b90a7', maxRotation: 30 } },
+        y: {
+          title: { display: true, text: 'Median PPL', color: '#8b90a7' },
+          grid: { color: '#2e3247' },
+          ticks: { color: '#8b90a7', callback: v => fmtK(v) },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+})();
+
 // ── Engine Comparison Grouped Bar ────────────────────────────────────────────
 (function() {
   // Pick best run per engine (lowest median CER)
   const bestByEngine = {};
-  DATA.runs.forEach(r => {
+  DATA.runs.filter(r => r.engine !== 'ground_truth').forEach(r => {
     if (!bestByEngine[r.engine] || r.cer_median < bestByEngine[r.engine].cer_median)
       bestByEngine[r.engine] = r;
   });
@@ -449,7 +544,12 @@ function fmtK(v) { return v >= 1000 ? (v/1000).toFixed(1)+'K' : v.toFixed(0); }
       +'<span>'+(EL[r.engine]||r.engine)+'</span></div>';
   });
 
-  const labels = runs.map(r => (EL[r.engine]||r.engine)+' / '+r.model_display.split('-').slice(-2).join('-'));
+  const labels = runs.map(r => {
+    const eng = EL[r.engine]||r.engine;
+    const model = r.model_display.length > 25 ? r.model_display.slice(0, 22)+'…' : r.model_display;
+    const opts = r.options_str ? ' ('+r.options_str+')' : '';
+    return eng+' / '+model+opts;
+  });
   const values = runs.map(r => r.corr_cer_log_ppl_raw);
   const colors = runs.map(r => {
     const v = r.corr_cer_log_ppl_raw;
@@ -660,7 +760,7 @@ function fmtK(v) { return v >= 1000 ? (v/1000).toFixed(1)+'K' : v.toFixed(0); }
             grid: { color: '#2e3247' },
             ticks: { color: '#8b90a7' },
             beginAtZero: true,
-            max: 0.6,
+            max: Math.min(Math.ceil(Math.max(...cerVals) * 12) / 10, 1.0),
           },
           y: {
             grid: { color: '#2e3247' },
