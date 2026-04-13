@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tibetan OCR — Perplexity Report</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:         #0f1117;
+  --surface:    #1a1d27;
+
+  --border:     #2e3247;
+  --text:       #e8eaf0;
+  --muted:      #8b90a7;
+  --accent:     #5b8def;
+  --good:       #4ade80;
+  --warn:       #facc15;
+  --bad:        #f87171;
+  --radius:     10px;
+  --shadow:     0 2px 16px rgba(0,0,0,0.4);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.page { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+
+.page-header { margin-bottom: 40px; }
+.page-header h1 { font-size: 24px; font-weight: 700; }
+.page-header p  { color: var(--muted); margin-top: 6px; font-size: 13px; }
+
+section { margin-bottom: 48px; }
+section > h2 {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px; margin-bottom: 20px;
+}
+
+/* Scorecards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+  box-shadow: var(--shadow);
+}
+.card .lbl  { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+.card .val  { font-size: 30px; font-weight: 700; margin-top: 6px; }
+.card .sub  { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.card.accent .val { color: var(--accent); }
+.card.good   .val { color: var(--good); }
+.card.warn   .val { color: var(--warn); }
+
+/* Panels */
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px;
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+}
+.panel h3  { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.panel .desc { font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+
+/* Legend */
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; font-size: 12px; }
+.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* Guide box */
+.guide {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 28px 32px;
+  box-shadow: var(--shadow); line-height: 1.8;
+}
+.guide h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; color: var(--accent); }
+.guide h3:first-child { margin-top: 0; }
+.guide p  { color: #c5c9d9; margin-bottom: 10px; font-size: 13px; }
+.guide ul { padding-left: 20px; color: #c5c9d9; font-size: 13px; }
+.guide li { margin-bottom: 6px; }
+
+/* Score band table */
+.band-table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 13px; }
+.band-table th { text-align: left; padding: 8px 12px; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+.band-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.band-table .band-good { border-left: 3px solid var(--good); }
+.band-table .band-warn { border-left: 3px solid var(--warn); }
+.band-table .band-bad  { border-left: 3px solid var(--bad); }
+
+/* Findings */
+.findings {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 28px 32px;
+  box-shadow: var(--shadow); line-height: 1.8;
+}
+.findings h3 { font-size: 15px; font-weight: 600; margin: 22px 0 10px; color: var(--text); }
+.findings h3:first-child { margin-top: 0; }
+.findings p  { color: #c5c9d9; margin-bottom: 10px; font-size: 13px; }
+.findings ul { padding-left: 20px; color: #c5c9d9; font-size: 13px; }
+.findings li { margin-bottom: 6px; }
+.hl   { color: var(--accent); font-weight: 600; }
+.good { color: var(--good);   font-weight: 600; }
+.warn { color: var(--warn);   font-weight: 600; }
+.bad  { color: var(--bad);    font-weight: 600; }
+
+/* Two-col layout */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+/* Tooltip term */
+.term { border-bottom: 1px dashed var(--muted); cursor: help; }
+
+/* Dimension tabs */
+.tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+.tab {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--muted); border-radius: 6px; padding: 5px 14px;
+  font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s;
+}
+.tab:hover { border-color: var(--accent); color: var(--text); }
+.tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="page-header">
+  <h1>Tibetan OCR — Perplexity Analysis</h1>
+  <p>How well does KenLM perplexity (BoKenlm-syl-v0.1) predict OCR quality (CER) across 30 runs and 7 engines?</p>
+</div>
+
+<!-- 0. How to Read This Report -->
+<section>
+  <h2>How to Read This Report</h2>
+  <div class="guide">
+    <h3>What is Perplexity (PPL)?</h3>
+    <p>
+      Perplexity measures how <em>surprised</em> a language model is by a piece of text. It is computed using
+      <strong>BoKenlm-syl-v0.1</strong>, a KenLM n-gram model trained on clean Tibetan syllables.
+      Think of it as a "naturalness score" — text that looks like proper Tibetan gets a <span class="good">low PPL</span>,
+      while garbled or noisy OCR output gets a <span class="bad">high PPL</span>.
+    </p>
+    <p>
+      Two variants are computed for each image: <strong>PPL Raw</strong> (minimal cleanup — just strip newlines)
+      and <strong>PPL Normalized</strong> (full CER normalization pipeline — Unicode normalization, whitespace removal,
+      tsheg folding, placeholder removal).
+    </p>
+
+    <h3>What is CER?</h3>
+    <p>
+      <strong>Character Error Rate</strong> = edit distance between OCR output and ground truth, divided by
+      the length of the ground truth. <span class="good">CER = 0</span> means perfect transcription;
+      <span class="bad">CER = 1</span> means every character is wrong.
+    </p>
+
+    <h3>Score Interpretation Guide</h3>
+    <table class="band-table">
+      <thead>
+        <tr><th>Metric</th><th>Good</th><th>Moderate</th><th>Poor</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>CER</strong></td>
+          <td class="band-good">&lt; 0.10 (90%+ accuracy)</td>
+          <td class="band-warn">0.10 – 0.30</td>
+          <td class="band-bad">&gt; 0.30 (less than 70% accuracy)</td>
+        </tr>
+        <tr>
+          <td><strong>PPL (median)</strong></td>
+          <td class="band-good">&lt; 50K (natural Tibetan)</td>
+          <td class="band-warn">50K – 150K</td>
+          <td class="band-bad">&gt; 150K (heavily garbled)</td>
+        </tr>
+        <tr>
+          <td><strong>Correlation (r)</strong></td>
+          <td class="band-good">&gt; 0.50 (PPL is a useful proxy)</td>
+          <td class="band-warn">0.20 – 0.50 (weak signal)</td>
+          <td class="band-bad">&lt; 0.20 (PPL not useful)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>What the Charts Show</h3>
+    <ul>
+      <li><strong>Overview cards</strong> — high-level stats: total runs, images, and pooled correlation.</li>
+      <li><strong>Engine Comparison (bar chart)</strong> — median CER and PPL side by side for each engine, so you can see which engines produce the best output.</li>
+      <li><strong>CER–PPL Correlation (horizontal bars)</strong> — how well PPL predicts error rate <em>within</em> each run. Longer bars = PPL is more useful for that run.</li>
+      <li><strong>CER Distribution by Engine (box plot)</strong> — spread of error rates per engine: the box shows the middle 50% of images, the line is the median.</li>
+      <li><strong>Breakdown by Dimension (grouped bars)</strong> — CER and PPL broken down by script type, technology, legibility, and format for the best Google Vision run.</li>
+      <li><strong>Image-Level Heatmap (binned)</strong> — instead of a 1000-point scatter, images are binned into PPL × CER buckets so you can see where the density is.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 1. Scorecards -->
+<section>
+  <h2>Overview</h2>
+  <div class="cards" id="scorecards"></div>
+</section>
+
+<!-- 2. Perplexity Comparison (tabbed) -->
+<section>
+  <h2>Perplexity Comparison</h2>
+  <div class="panel">
+    <h3>Median PPL — Ground Truth &amp; all engines, by dimension</h3>
+    <p class="desc">
+      Lower PPL = text more closely resembles clean Tibetan.
+      <strong>Ground Truth</strong> sets the natural lower bound — the PPL of human transcriptions.
+      Switch views to compare by engine, script type, or production technology.
+    </p>
+    <div class="tabs" id="ppl-tabs">
+      <button class="tab active" data-dim="engine">By Engine</button>
+      <button class="tab" data-dim="Script Type">Script Type</button>
+      <button class="tab" data-dim="Script Category">Script Category</button>
+      <button class="tab" data-dim="Technology">Technology</button>
+      <button class="tab" data-dim="Legibility">Legibility</button>
+      <button class="tab" data-dim="Format">Format</button>
+      <button class="tab" data-dim="Period">Period</button>
+      <button class="tab" data-dim="Popularity">Popularity</button>
+    </div>
+    <div style="position:relative;height:430px">
+      <canvas id="pplCompChart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- 3. CER & PPL side by side (tabbed) -->
+<section>
+  <h2>CER &amp; PPL Side by Side</h2>
+  <div class="panel">
+    <h3>Character Error Rate vs Perplexity — same dimension views</h3>
+    <p class="desc">
+      CER (left axis, bars — lower = better accuracy) and PPL raw mean (right axis, lines — lower = more natural).
+      Engine view: bars per engine. Dimension views: CER bars per engine (solid) + PPL lines per engine including
+      <span class="good">Ground Truth</span> (solid line) for direct comparison.
+    </p>
+    <div class="tabs" id="cerPpl-tabs">
+      <button class="tab active" data-dim="engine">By Engine</button>
+      <button class="tab" data-dim="Script Type">Script Type</button>
+      <button class="tab" data-dim="Script Category">Script Category</button>
+      <button class="tab" data-dim="Technology">Technology</button>
+      <button class="tab" data-dim="Legibility">Legibility</button>
+      <button class="tab" data-dim="Format">Format</button>
+      <button class="tab" data-dim="Period">Period</button>
+      <button class="tab" data-dim="Popularity">Popularity</button>
+    </div>
+    <div style="position:relative;height:430px">
+      <canvas id="cerPplChart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- 4. Per-run correlation horizontal bar -->
+<section>
+  <h2>CER–PPL Correlation by Run</h2>
+  <div class="panel">
+    <h3>Pearson r (CER vs log PPL raw) — per run</h3>
+    <p class="desc">
+      Higher r means perplexity is a better predictor of error rate within that run.
+      Colour-coded by engine. <span class="good">r &gt; 0.5</span> = useful signal,
+      <span class="warn">0.2–0.5</span> = weak, <span class="bad">&lt; 0.2</span> = not useful.
+    </p>
+    <div class="legend" id="corr-legend"></div>
+    <div style="position:relative;height:520px">
+      <canvas id="corrChart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- 4. CER box plot by engine -->
+<section>
+  <h2>CER Distribution by Engine</h2>
+  <div class="panel">
+    <h3>CER spread per engine (best run each)</h3>
+    <p class="desc">
+      The bar shows the interquartile range (P25–P75). The white line marks the median.
+      Hover for full stats including mean.
+    </p>
+    <div style="position:relative;height:350px">
+      <canvas id="boxChart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- 6. Binned heatmap -->
+<section>
+  <h2>Image-Level Density (Sample Run)</h2>
+  <div class="panel">
+    <h3>PPL vs CER — Binned Heatmap</h3>
+    <p class="desc">
+      Run: <strong id="sample-run-label"></strong> — <span id="sample-run-n"></span> images.
+      Darker cells = more images in that PPL×CER bucket. Most images cluster in the low-CER / moderate-PPL zone.
+    </p>
+    <div style="position:relative;height:420px">
+      <canvas id="heatmapChart"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- 7. Findings -->
+<section>
+  <h2>Key Findings</h2>
+  <div class="findings">
+    <h3>1. Perplexity is a weak global proxy for CER</h3>
+    <p>
+      Pooled across all 30 runs and ~27,000 images, the Pearson correlation between
+      CER and log(PPL raw) is only <span class="hl">r = 0.016</span>, and r = 0.013
+      for normalised PPL. At the aggregate level, a high perplexity score does not
+      reliably signal a high error rate.
+    </p>
+
+    <h3>2. Within individual runs the signal can be strong</h3>
+    <p>
+      Per-run correlations vary widely. The strongest is
+      <span class="good">r = 0.727</span> for a Transkribus run with layout enabled.
+      Several Google Vision and PaddleOCR runs reach r &#x2248; 0.50–0.60.
+      This means PPL is useful as a <em>within-run</em> quality signal — for flagging which pages
+      within a single pipeline need review — but not for comparing across engines.
+    </p>
+    <p>
+      High-temperature Gemini runs show near-zero or negative r: the model produces
+      fluent but incorrect Tibetan (low PPL, high CER), which inverts the expected relationship.
+    </p>
+
+    <h3>3. Why the pooled correlation collapses</h3>
+    <p>
+      Each engine has a different PPL baseline. Google Vision PPL medians cluster around
+      70–90K; PaddleOCR spotting runs reach 85–100K; some Gemini and PaddleOCR OCR runs
+      exceed 500K. Mixing these shifts the CER–PPL relationship into noise because the
+      PPL scale is engine-specific, not absolute.
+    </p>
+
+    <h3>4. Practical guidance</h3>
+    <ul>
+      <li><strong>Within a run:</strong> Use PPL to flag outlier pages for manual review.
+          A page whose PPL is 3–5x the run median likely has a problematic transcription
+          (works best for engines with r &gt; 0.4).</li>
+      <li><strong>Across engines:</strong> CER is the only reliable quality measure.
+          PPL baselines differ too much between engines to compare directly.</li>
+      <li><strong>For Gemini:</strong> PPL is not a useful signal — the model produces fluent
+          but incorrect text, giving misleadingly low PPL despite high CER.</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+
+<script>
+const DATA = __DASHBOARD_DATA__;
+
+// ── Ground truth PPL (sourced from perplexity_dashboard.html, 2026-04) ────────
+// KenLM perplexity computed for benchmark 20260315 raw transcriptions.
+// There is no CER for ground truth (compared against itself).
+const GT_RUN = {
+  bid:"benchmark", rid:"ground_truth", engine:"ground_truth",
+  model:"Ground Truth", model_display:"Ground Truth", options_str:"", label:"Ground Truth",
+  n_cer:0, n_ppl:1078,
+  cer_mean:null, cer_median:null, cer_p25:null, cer_p75:null,
+  ppl_raw_mean:76437.61, ppl_raw_median:60313.41,
+  ppl_norm_mean:73712.47, ppl_norm_median:61269.62,
+  corr_cer_log_ppl_raw:null, corr_cer_log_ppl_norm:null,
+};
+const GT_BREAKDOWNS = {
+  "Script Type": {
+    "Transitional": {n:48,  cer_mean:null,cer_median:null, ppl_raw_mean:97183.17, ppl_norm_mean:89854.26},
+    "Uchen":        {n:691, cer_mean:null,cer_median:null, ppl_raw_mean:84927.42, ppl_norm_mean:79942.82},
+    "Uchen+Uchen":  {n:15,  cer_mean:null,cer_median:null, ppl_raw_mean:82584.43, ppl_norm_mean:69884.20},
+    "Uchen+Ume":    {n:5,   cer_mean:null,cer_median:null, ppl_raw_mean:73486.04, ppl_norm_mean:75534.96},
+    "Ume":          {n:305, cer_mean:null,cer_median:null, ppl_raw_mean:54684.28, ppl_norm_mean:57883.89},
+    "Ume+Uchen":    {n:2,   cer_mean:null,cer_median:null, ppl_raw_mean:41466.44, ppl_norm_mean:41715.38},
+    "Ume+Ume":      {n:4,   cer_mean:null,cer_median:null, ppl_raw_mean:71054.30, ppl_norm_mean:77768.24},
+  },
+  "Technology": {
+    "blockprints":   {n:365, cer_mean:null,cer_median:null, ppl_raw_mean:94440.52, ppl_norm_mean:82430.69},
+    "digital_fonts": {n:208, cer_mean:null,cer_median:null, ppl_raw_mean:50517.15, ppl_norm_mean:63522.63},
+    "manuscripts":   {n:425, cer_mean:null,cer_median:null, ppl_raw_mean:75497.68, ppl_norm_mean:72073.82},
+    "metal_types":   {n:31,  cer_mean:null,cer_median:null, ppl_raw_mean:73002.14, ppl_norm_mean:81130.53},
+    "modern":        {n:32,  cer_mean:null,cer_median:null, ppl_raw_mean:59960.67, ppl_norm_mean:58310.69},
+    "typewriters":   {n:9,   cer_mean:null,cer_median:null, ppl_raw_mean:83889.82, ppl_norm_mean:79583.41},
+  },
+  "Legibility": {
+    "0 - Illegible": {n:4,   cer_mean:null,cer_median:null, ppl_raw_mean:53919.00,  ppl_norm_mean:50475.77},
+    "1 - Poor":      {n:54,  cer_mean:null,cer_median:null, ppl_raw_mean:106925.51, ppl_norm_mean:91992.63},
+    "2 - Fair":      {n:141, cer_mean:null,cer_median:null, ppl_raw_mean:86297.52,  ppl_norm_mean:79284.35},
+    "3 - Good":      {n:326, cer_mean:null,cer_median:null, ppl_raw_mean:74653.20,  ppl_norm_mean:68904.12},
+    "4 - Excellent": {n:544, cer_mean:null,cer_median:null, ppl_raw_mean:72463.25,  ppl_norm_mean:73765.17},
+  },
+  "Format": {
+    "blockprint":             {n:14,  cer_mean:null,cer_median:null, ppl_raw_mean:95119.15,  ppl_norm_mean:90123.21},
+    "book":                   {n:291, cer_mean:null,cer_median:null, ppl_raw_mean:52977.63,  ppl_norm_mean:63427.33},
+    "inscription":            {n:1,   cer_mean:null,cer_median:null, ppl_raw_mean:32247.50,  ppl_norm_mean:106829.15},
+    "palm leaf":              {n:1,   cer_mean:null,cer_median:null, ppl_raw_mean:91699.71,  ppl_norm_mean:85228.40},
+    "pecha":                  {n:723, cer_mean:null,cer_median:null, ppl_raw_mean:85528.41,  ppl_norm_mean:77604.93},
+    "scroll (landscape)":     {n:17,  cer_mean:null,cer_median:null, ppl_raw_mean:106969.91, ppl_norm_mean:89543.32},
+    "scroll (portrait/long)": {n:23,  cer_mean:null,cer_median:null, ppl_raw_mean:64089.43,  ppl_norm_mean:64642.95},
+  },
+  // Script Category, Period, Popularity: not available for ground truth
+  "Script Category": {}, "Period": {}, "Popularity": {},
+};
+DATA.runs.push(GT_RUN);
+DATA.engine_breakdowns["ground_truth"] = GT_BREAKDOWNS;
+
+const EC = DATA.engine_colors;
+const EL = DATA.engine_labels;
+function fmtK(v) { return v >= 1000 ? (v/1000).toFixed(1)+'K' : v.toFixed(0); }
+
+// ── Scorecards ──────────────────────────────────────────────────────────────
+(function() {
+  const el = document.getElementById('scorecards');
+  const nRuns = DATA.runs.length;
+  const totalImages = DATA.runs.reduce((s,r) => s + r.n_cer, 0);
+  const nEngines = new Set(DATA.runs.map(r => r.engine)).size;
+  const pooledR = DATA.overall_correlation.cer_vs_log_ppl_raw;
+
+  const bestRun = [...DATA.runs].filter(r => r.corr_cer_log_ppl_raw != null).sort((a,b) => b.corr_cer_log_ppl_raw - a.corr_cer_log_ppl_raw)[0];
+  const bestCER = [...DATA.runs].filter(r => r.cer_median != null).sort((a,b) => a.cer_median - b.cer_median)[0];
+
+  const cards = [
+    { lbl:'Runs', val:nRuns, sub:nEngines+' engines', cls:'accent' },
+    { lbl:'Total Images', val:totalImages.toLocaleString(), sub:'across all runs', cls:'accent' },
+    { lbl:'Pooled r (CER vs log PPL)', val: pooledR != null ? pooledR.toFixed(3) : 'N/A', sub:'very weak — not useful globally', cls:'warn' },
+    { lbl:'Best Within-Run r', val: bestRun ? bestRun.corr_cer_log_ppl_raw.toFixed(3) : 'N/A', sub: bestRun ? (EL[bestRun.engine]||bestRun.engine)+' / '+bestRun.model_display : '—', cls:'good' },
+    { lbl:'Best Median CER', val: bestCER ? (bestCER.cer_median*100).toFixed(1)+'%' : 'N/A', sub: bestCER ? (EL[bestCER.engine]||bestCER.engine)+' / '+bestCER.model_display : '—', cls:'good' },
+  ];
+
+  cards.forEach(c => {
+    el.innerHTML += '<div class="card '+c.cls+'">'
+      +'<div class="lbl">'+c.lbl+'</div>'
+      +'<div class="val">'+c.val+'</div>'
+      +'<div class="sub">'+c.sub+'</div></div>';
+  });
+})();
+
+// ── PPL Comparison — tabbed ──────────────────────────────────────────────────
+(function() {
+  let chart = null;
+
+  function render(dim) {
+    const eb = DATA.engine_breakdowns || {};
+    let labels, datasets;
+
+    if (dim === 'engine') {
+      const best = {};
+      DATA.runs.forEach(r => {
+        if (r.ppl_raw_median == null) return;
+        if (!best[r.engine] || r.ppl_raw_median < best[r.engine].ppl_raw_median) best[r.engine] = r;
+      });
+      const engs = Object.keys(best).sort((a,b) => best[a].ppl_raw_median - best[b].ppl_raw_median);
+      labels = engs.map(e => EL[e]||e);
+      datasets = [
+        {
+          label: 'PPL Raw (median)',
+          data:  engs.map(e => best[e].ppl_raw_median),
+          backgroundColor: engs.map(e => (EC[e]||'#888')+'cc'),
+          borderColor:     engs.map(e => EC[e]||'#888'),
+          borderWidth: 1, borderRadius: 4,
+        },
+        {
+          label: 'PPL Normalized (median)',
+          data:  engs.map(e => best[e].ppl_norm_median),
+          backgroundColor: engs.map(e => (EC[e]||'#888')+'44'),
+          borderColor:     engs.map(e => EC[e]||'#888'),
+          borderWidth: 2, borderRadius: 4,
+        }
+      ];
+    } else {
+      const cats = new Set();
+      Object.values(eb).forEach(eng => Object.keys((eng[dim])||{}).forEach(c => cats.add(c)));
+      labels = [...cats].sort();
+      const engList = Object.keys(eb).filter(e => e !== 'ground_truth').sort();
+      if (eb['ground_truth']) engList.push('ground_truth');
+      // One bar per engine per category (ppl_raw_mean); GT included as last
+      datasets = engList.filter(e => eb[e] && eb[e][dim]).map(eng => ({
+        label: EL[eng]||eng,
+        data:  labels.map(c => (eb[eng][dim][c]||{}).ppl_raw_mean ?? null),
+        backgroundColor: (EC[eng]||'#888')+(eng === 'ground_truth' ? 'ff' : 'cc'),
+        borderColor:     EC[eng]||'#888',
+        borderWidth: eng === 'ground_truth' ? 2 : 1,
+        borderRadius: 4,
+      }));
+    }
+
+    if (chart) chart.destroy();
+    chart = new Chart(document.getElementById('pplCompChart'), {
+      type: 'bar', data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#8b90a7', boxWidth: 12 } },
+          tooltip: {
+            callbacks: {
+              afterLabel: item => {
+                if (dim !== 'engine') return [];
+                const best = {};
+                DATA.runs.forEach(r => { if (r.ppl_raw_median != null && (!best[r.engine] || r.ppl_raw_median < best[r.engine].ppl_raw_median)) best[r.engine] = r; });
+                const engs = Object.keys(best).sort((a,b) => best[a].ppl_raw_median - best[b].ppl_raw_median);
+                const r = best[engs[item.dataIndex]];
+                if (!r) return [];
+                const lines = ['PPL raw: '+fmtK(r.ppl_raw_median), 'PPL norm: '+fmtK(r.ppl_norm_median)];
+                if (r.cer_median != null) lines.push('CER median: '+(r.cer_median*100).toFixed(1)+'%');
+                else lines.push('CER: N/A (ground truth)');
+                return lines;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: '#2e3247' }, ticks: { color: '#8b90a7', maxRotation: 35 } },
+          y: {
+            beginAtZero: true, grid: { color: '#2e3247' },
+            ticks: { color: '#8b90a7', callback: v => fmtK(v) },
+            title: { display: true, text: 'Median PPL', color: '#8b90a7' }
+          }
+        }
+      }
+    });
+  }
+
+  render('engine');
+  document.getElementById('ppl-tabs').addEventListener('click', e => {
+    if (!e.target.classList.contains('tab')) return;
+    document.querySelectorAll('#ppl-tabs .tab').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    render(e.target.dataset.dim);
+  });
+})();
+
+// ── CER & PPL Side by Side — tabbed ──────────────────────────────────────────
+(function() {
+  let chart = null;
+
+  function render(dim) {
+    const eb = DATA.engine_breakdowns || {};
+    let labels, datasets;
+
+    if (dim === 'engine') {
+      // Per engine: CER bars (left) + PPL bars (right), GT shows PPL only
+      const best = {};
+      DATA.runs.forEach(r => {
+        if (!best[r.engine] ||
+            (r.cer_median != null && (best[r.engine].cer_median == null || r.cer_median < best[r.engine].cer_median)))
+          best[r.engine] = r;
+      });
+      const ocr = Object.keys(best).filter(e => e !== 'ground_truth')
+                    .sort((a,b) => (best[a].cer_median||0) - (best[b].cer_median||0));
+      const all = best['ground_truth'] ? [...ocr, 'ground_truth'] : ocr;
+      labels = all.map(e => EL[e]||e);
+      datasets = [
+        {
+          label: 'Median CER',
+          data:  all.map(e => best[e].cer_median ?? null),
+          backgroundColor: all.map(e => (EC[e]||'#888')+'cc'),
+          borderColor:     all.map(e => EC[e]||'#888'),
+          borderWidth: 1, borderRadius: 4, yAxisID: 'yCER',
+        },
+        {
+          label: 'Median PPL Raw',
+          data:  all.map(e => best[e].ppl_raw_median ?? null),
+          backgroundColor: all.map(e => (EC[e]||'#888')+'33'),
+          borderColor:     all.map(e => EC[e]||'#888'),
+          borderWidth: 2, borderRadius: 4, yAxisID: 'yPPL',
+        }
+      ];
+    } else {
+      // Per dimension: per-engine CER bars + GT PPL line
+      const cats = new Set();
+      Object.values(eb).forEach(eng => Object.keys((eng[dim])||{}).forEach(c => cats.add(c)));
+      labels = [...cats].sort();
+      const ocrEngs = Object.keys(eb).filter(e => e !== 'ground_truth').sort();
+
+      // One CER dataset per OCR engine
+      const cerDatasets = ocrEngs.filter(e => eb[e] && eb[e][dim]).map(eng => ({
+        label: (EL[eng]||eng)+' CER',
+        data:  labels.map(c => (eb[eng][dim][c]||{}).cer_mean ?? null),
+        backgroundColor: (EC[eng]||'#888')+'99',
+        borderColor:     EC[eng]||'#888',
+        borderWidth: 1, borderRadius: 4, yAxisID: 'yCER',
+      }));
+
+      // PPL line per engine including GT on right axis
+      const allPplEngs = [...ocrEngs.filter(e => eb[e] && eb[e][dim])];
+      if (eb['ground_truth'] && eb['ground_truth'][dim]) allPplEngs.push('ground_truth');
+      const pplDatasets = allPplEngs.map(eng => ({
+        type: 'line',
+        label: (EL[eng]||eng)+' PPL',
+        data:  labels.map(c => (eb[eng][dim][c]||{}).ppl_raw_mean ?? null),
+        borderColor: EC[eng]||'#888',
+        backgroundColor: 'transparent',
+        borderWidth: eng === 'ground_truth' ? 3 : 1.5,
+        borderDash: eng === 'ground_truth' ? [] : [5, 3],
+        pointRadius: eng === 'ground_truth' ? 5 : 3,
+        pointBackgroundColor: EC[eng]||'#888',
+        tension: 0.3,
+        fill: false,
+        yAxisID: 'yPPL',
+      }));
+
+      datasets = [...cerDatasets, ...pplDatasets];
+    }
+
+    if (chart) chart.destroy();
+    chart = new Chart(document.getElementById('cerPplChart'), {
+      type: 'bar', data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#8b90a7', boxWidth: 12 } },
+          tooltip: {
+            callbacks: {
+              label: item => {
+                const v = item.raw;
+                if (v == null) return null;
+                const isLine = item.dataset.type === 'line';
+                const isGT   = item.dataset.label.includes('Ground Truth');
+                if (isLine) {
+                  const eng = isGT ? '(GT)' : '';
+                  return item.dataset.label+': '+fmtK(v)+' PPL '+eng;
+                }
+                return item.dataset.label+': '+(v*100).toFixed(1)+'% CER';
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: '#2e3247' }, ticks: { color: '#8b90a7', maxRotation: 35 } },
+          yCER: {
+            position: 'left',
+            title: { display: true, text: 'CER', color: '#8b90a7' },
+            grid: { color: '#2e3247' },
+            ticks: { color: '#8b90a7' },
+            beginAtZero: true,
+          },
+          yPPL: {
+            position: 'right',
+            title: { display: true, text: 'PPL', color: '#8b90a7' },
+            grid: { drawOnChartArea: false },
+            ticks: { color: '#8b90a7', callback: v => fmtK(v) },
+            beginAtZero: true,
+          }
+        }
+      }
+    });
+  }
+
+  render('engine');
+  document.getElementById('cerPpl-tabs').addEventListener('click', e => {
+    if (!e.target.classList.contains('tab')) return;
+    document.querySelectorAll('#cerPpl-tabs .tab').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    render(e.target.dataset.dim);
+  });
+})();
+
+// ── Per-run correlation bar ──────────────────────────────────────────────────
+(function() {
+  // Exclude runs with no correlation (e.g. ground truth) from this chart
+  const runs = [...DATA.runs]
+    .filter(r => r.corr_cer_log_ppl_raw != null)
+    .sort((a,b) => a.corr_cer_log_ppl_raw - b.corr_cer_log_ppl_raw);
+
+  const legendDiv = document.getElementById('corr-legend');
+  const seen = new Set();
+  runs.forEach(r => {
+    if (seen.has(r.engine)) return;
+    seen.add(r.engine);
+    legendDiv.innerHTML += '<div class="legend-item">'
+      +'<div class="legend-dot" style="background:'+EC[r.engine]+'"></div>'
+      +'<span>'+(EL[r.engine]||r.engine)+'</span></div>';
+  });
+
+  const labels = runs.map(r => {
+    const eng = EL[r.engine]||r.engine;
+    const model = r.model_display.length > 25 ? r.model_display.slice(0, 22)+'…' : r.model_display;
+    const opts = r.options_str ? ' ('+r.options_str+')' : '';
+    return eng+' / '+model+opts;
+  });
+  const values = runs.map(r => r.corr_cer_log_ppl_raw);
+  const colors = runs.map(r => {
+    const v = r.corr_cer_log_ppl_raw;
+    if (v >= 0.5) return '#4ade80cc';
+    if (v >= 0.2) return '#facc15cc';
+    return '#f87171cc';
+  });
+
+  const ctx = document.getElementById('corrChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 3,
+        barPercentage: 0.75,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => runs[items[0].dataIndex].rid,
+            label: (item) => {
+              const r = runs[item.dataIndex];
+              return [
+                'Engine: '+(EL[r.engine]||r.engine),
+                'Model: '+r.model_display,
+                'r(CER, log PPL raw): '+(r.corr_cer_log_ppl_raw != null ? r.corr_cer_log_ppl_raw.toFixed(3) : 'N/A'),
+                'r(CER, log PPL norm): '+(r.corr_cer_log_ppl_norm != null ? r.corr_cer_log_ppl_norm.toFixed(3) : 'N/A'),
+                'CER median: '+(r.cer_median != null ? (r.cer_median*100).toFixed(1)+'%' : 'N/A'),
+                'n images: '+r.n_ppl,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          min: -0.2, max: 0.8,
+          grid: { color: '#2e3247' },
+          ticks: { color: '#8b90a7' },
+          title: { display: true, text: 'Pearson r (green \u2265 0.5 = useful, yellow 0.2\u20130.5 = weak, red < 0.2 = not useful)', color: '#8b90a7', font: { size: 11 } }
+        },
+        y: {
+          grid: { color: '#2e3247' },
+          ticks: { color: '#8b90a7', font: { size: 10 } }
+        }
+      }
+    }
+  });
+})();
+
+// ── CER Box Plot (simulated with floating bars) ─────────────────────────────
+(function() {
+  // Pick best run per engine
+  const bestByEngine = {};
+  DATA.runs.forEach(r => {
+    if (r.cer_median == null) return;
+    if (!bestByEngine[r.engine] || r.cer_median < bestByEngine[r.engine].cer_median)
+      bestByEngine[r.engine] = r;
+  });
+  const engines = Object.keys(bestByEngine).sort((a,b) =>
+    bestByEngine[a].cer_median - bestByEngine[b].cer_median);
+
+  const labels = engines.map(e => EL[e]||e);
+  const colors = engines.map(e => EC[e]||'#888');
+
+  // IQR bars (p25 to p75)
+  const iqrData = engines.map(e => {
+    const r = bestByEngine[e];
+    return [r.cer_p25 ?? r.cer_median, r.cer_p75 ?? r.cer_median];
+  });
+
+  // Median markers (thin bar)
+  const medianData = engines.map(e => {
+    const r = bestByEngine[e];
+    return [r.cer_median - 0.003, r.cer_median + 0.003];
+  });
+
+  const ctx = document.getElementById('boxChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'IQR (P25–P75)',
+          data: iqrData,
+          backgroundColor: colors.map(c => c + '88'),
+          borderColor: colors,
+          borderWidth: 1,
+          borderRadius: 4,
+          barPercentage: 0.6,
+        },
+        {
+          label: 'Median',
+          data: medianData,
+          backgroundColor: '#ffffffdd',
+          borderColor: '#ffffff',
+          borderWidth: 0,
+          barPercentage: 0.7,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#8b90a7' } },
+        tooltip: {
+          callbacks: {
+            label: (item) => {
+              const e = engines[item.dataIndex];
+              const r = bestByEngine[e];
+              return [
+                'CER P25: '+(r.cer_p25 != null ? (r.cer_p25*100).toFixed(1)+'%' : 'N/A'),
+                'CER Median: '+(r.cer_median != null ? (r.cer_median*100).toFixed(1)+'%' : 'N/A'),
+                'CER P75: '+(r.cer_p75 != null ? (r.cer_p75*100).toFixed(1)+'%' : 'N/A'),
+                'CER Mean: '+(r.cer_mean != null ? (r.cer_mean*100).toFixed(1)+'%' : 'N/A'),
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#2e3247' }, ticks: { color: '#8b90a7' } },
+        y: {
+          title: { display: true, text: 'CER', color: '#8b90a7' },
+          grid: { color: '#2e3247' },
+          ticks: { color: '#8b90a7' },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+})();
+
+
+
+// ── Binned Heatmap ──────────────────────────────────────────────────────────
+(function() {
+  const sampleRid = DATA.sample_run;
+  const run = DATA.runs.find(r => r.rid === sampleRid) || {};
+
+  document.getElementById('sample-run-label').textContent =
+    sampleRid + ' (' + (EL[run.engine]||run.engine||'') + ')';
+  document.getElementById('sample-run-n').textContent = DATA.image_sample.length;
+
+  // Bin the data
+  const pplBins = [3.5, 4.0, 4.2, 4.4, 4.6, 4.8, 5.0, 5.2, 5.5, 6.0, 7.0];
+  const cerBins = [0, 0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.60, 0.80, 1.0];
+
+  const grid = [];
+  for (let ci = 0; ci < cerBins.length - 1; ci++) {
+    for (let pi = 0; pi < pplBins.length - 1; pi++) {
+      grid.push({ x: pi, y: ci, count: 0 });
+    }
+  }
+
+  DATA.image_sample.forEach(pt => {
+    if (pt.ppl_raw == null || pt.cer == null) return;
+    const logPPL = Math.log10(pt.ppl_raw);
+    const cerVal = pt.cer;
+
+    let pi = pplBins.length - 2;
+    for (let i = 0; i < pplBins.length - 1; i++) {
+      if (logPPL >= pplBins[i] && logPPL < pplBins[i+1]) { pi = i; break; }
+    }
+    let ci = cerBins.length - 2;
+    for (let i = 0; i < cerBins.length - 1; i++) {
+      if (cerVal >= cerBins[i] && cerVal < cerBins[i+1]) { ci = i; break; }
+    }
+    const idx = ci * (pplBins.length - 1) + pi;
+    if (idx >= 0 && idx < grid.length) grid[idx].count++;
+  });
+
+  const maxCount = Math.max(...grid.map(g => g.count), 1);
+
+  // Draw on canvas manually
+  const canvas = document.getElementById('heatmapChart');
+  const ctx = canvas.getContext('2d');
+
+  // Use Chart.js just for axes framing, but draw the heatmap manually
+  const pplLabels = [];
+  for (let i = 0; i < pplBins.length - 1; i++) {
+    pplLabels.push(pplBins[i].toFixed(1)+'–'+pplBins[i+1].toFixed(1));
+  }
+  const cerLabels = [];
+  for (let i = 0; i < cerBins.length - 1; i++) {
+    cerLabels.push((cerBins[i]*100).toFixed(0)+'–'+(cerBins[i+1]*100).toFixed(0)+'%');
+  }
+
+  // Create bubble chart to simulate heatmap
+  const bubbleData = grid.filter(g => g.count > 0).map(g => ({
+    x: g.x,
+    y: g.y,
+    r: Math.max(3, Math.sqrt(g.count / maxCount) * 28),
+    count: g.count,
+    pplRange: pplLabels[g.x],
+    cerRange: cerLabels[g.y],
+  }));
+
+  new Chart(ctx, {
+    type: 'bubble',
+    data: {
+      datasets: [{
+        data: bubbleData,
+        backgroundColor: bubbleData.map(d => {
+          const intensity = Math.min(d.count / maxCount, 1);
+          const r = Math.round(91 + (74 - 91) * intensity);
+          const g = Math.round(141 + (222 - 141) * intensity);
+          const b = Math.round(239 + (128 - 239) * intensity);
+          const a = 0.3 + intensity * 0.7;
+          return 'rgba('+r+','+g+','+b+','+a+')';
+        }),
+        borderColor: '#5b8def44',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => {
+              const d = item.raw;
+              return [
+                'log\u2081\u2080(PPL): '+d.pplRange,
+                'CER: '+d.cerRange,
+                'Images: '+d.count,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'log\u2081\u2080(PPL raw) bins', color: '#8b90a7' },
+          grid: { color: '#2e3247' },
+          ticks: {
+            color: '#8b90a7',
+            callback: function(v) { return pplLabels[v] || ''; },
+            stepSize: 1,
+          },
+          min: -0.5,
+          max: pplBins.length - 1.5,
+        },
+        y: {
+          title: { display: true, text: 'CER bins', color: '#8b90a7' },
+          grid: { color: '#2e3247' },
+          ticks: {
+            color: '#8b90a7',
+            callback: function(v) { return cerLabels[v] || ''; },
+            stepSize: 1,
+          },
+          min: -0.5,
+          max: cerBins.length - 1.5,
+        }
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>

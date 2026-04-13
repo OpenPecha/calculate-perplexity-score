@@ -330,7 +330,7 @@ overall_correlation = {
     "cer_vs_log_ppl_norm": pearson([v[0] for v in valid], [log_ppl(v[2]) for v in valid]),
 }
 
-# ── 9. ground truth PPL stats ─────────────────────────────────────────────────
+# ── 9. ground truth PPL stats + engine_breakdowns ────────────────────────────
 ground_truth_ppl = {"raw_median": None, "norm_median": None, "raw_mean": None, "norm_mean": None}
 if os.path.exists(GT_PPL_PATH):
     gt_rows = read_csv_dicts(GT_PPL_PATH)
@@ -365,6 +365,51 @@ if os.path.exists(GT_PPL_PATH):
 else:
     print(f"[WARN] Ground truth PPL file not found: {GT_PPL_PATH}")
 
+# ── engine_breakdowns: best run per engine → its dimension breakdown ──────────
+engine_breakdowns = {}
+best_per_engine = {}
+for rs in runs_summary:
+    eng = rs["engine"]
+    if eng == "ground_truth" or rs.get("cer_median") is None:
+        continue
+    if eng not in best_per_engine or rs["cer_median"] < best_per_engine[eng]["cer_median"]:
+        best_per_engine[eng] = rs
+
+for eng, rs in best_per_engine.items():
+    rid = rs["rid"]
+    if rid in breakdowns:
+        engine_breakdowns[eng] = breakdowns[rid]
+
+# Ground-truth dimension breakdown (join GT PPL with full_catalog)
+if os.path.exists(GT_PPL_PATH):
+    gt_ppl_map = {r["file_name"]: (safe_float(r["perplexity_raw"]), safe_float(r["perplexity_normalized"]))
+                  for r in read_csv_dicts(GT_PPL_PATH)}
+    gt_dim_data = {}
+    for dim_label, col in DIMENSION_MAP.items():
+        groups = {}
+        for row in full_cat_rows:
+            fname = row.get("new_filename", "")
+            cat   = (row.get(col) or "").strip()
+            if not cat or cat.lower() == "unknown" or fname not in gt_ppl_map:
+                continue
+            ppl_raw, ppl_norm = gt_ppl_map[fname]
+            if ppl_raw is None:
+                continue
+            if cat not in groups:
+                groups[cat] = {"raw": [], "norm": []}
+            groups[cat]["raw"].append(ppl_raw)
+            if ppl_norm is not None:
+                groups[cat]["norm"].append(ppl_norm)
+        gt_dim_data[dim_label] = {
+            cat: {
+                "n":            len(v["raw"]),
+                "ppl_raw_mean":  round(mean(v["raw"]),  2) if v["raw"]  else None,
+                "ppl_norm_mean": round(mean(v["norm"]), 2) if v["norm"] else None,
+            }
+            for cat, v in sorted(groups.items())
+        }
+    engine_breakdowns["ground_truth"] = gt_dim_data
+
 # ── 10. assemble report_data.json ─────────────────────────────────────────────
 report = {
     "runs":        runs_summary,
@@ -373,6 +418,7 @@ report = {
     "sample_run":  sample_run,
     "overall_correlation": overall_correlation,
     "ground_truth_ppl": ground_truth_ppl,
+    "engine_breakdowns": engine_breakdowns,
     "engine_colors": {
         "gemini":        "#D4793A",
         "google_vision": "#3B6BCA",
@@ -408,10 +454,8 @@ if os.path.exists(HTML_PATH):
         html = f.read()
     marker = "const DATA = "
     start  = html.index(marker)
-    end    = html.index(";
-", start) + 2
-    html   = html[:start] + "const DATA = " + json.dumps(report, ensure_ascii=False) + ";
-" + html[end:]
+    end    = html.index(";\n", start) + 2
+    html   = html[:start] + "const DATA = " + json.dumps(report, ensure_ascii=False) + ";\n" + html[end:]
     with open(HTML_PATH, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Injected DATA → {HTML_PATH}")
